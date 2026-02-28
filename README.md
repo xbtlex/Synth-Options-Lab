@@ -132,3 +132,4 @@ Open [http://localhost:3000](http://localhost:3000)
 
 **Built by Cartman | Synth Hackathon 2026**
 
+
