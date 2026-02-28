@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_SYNTH_API_KEY": "@synth_api_key"
+  },
+  "regions": [
+    "syd"
+  ]
+}
