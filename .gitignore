@@ -1,0 +1,38 @@
+# Build artifacts
+.next
+build/
+dist/
+out/
+
+# Dependencies
+node_modules
+*.lock
+.pnp
+.pnp.js
+
+# Environment
+.env.local
+.env.*.local
+.env.production.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+
+# Vercel
+.vercel
