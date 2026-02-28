@@ -1,28 +1,33 @@
 {
-  "name": "synth-hackathon",
+  "name": "synth-options-lab",
   "version": "1.0.0",
-  "description": "Synth Options Lab + Polymarket Edge Finder - Hackathon Submission",
-  "type": "module",
+  "description": "Synth Options Lab — Distribution-based options analysis powered by Synth predictions",
+  "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^2.10.3",
-    "axios": "^1.6.2",
-    "date-fns": "^2.30.0"
+    "next": "^15.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.0",
+    "swr": "^2.3.0",
+    "axios": "^1.7.0",
+    "date-fns": "^4.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "@types/react": "^18.2.37",
-    "@types/react-dom": "^18.2.15",
-    "@types/node": "^20.10.4",
-    "vite": "^5.0.7",
-    "@vitejs/plugin-react": "^4.2.1"
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^15.3.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   },
   "engines": {
     "node": ">=18.0.0"
