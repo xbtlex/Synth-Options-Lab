@@ -1,21 +1,22 @@
-import { FlatCompat } from '@eslint/eslintrc'
 import js from '@eslint/js'
-import nextPlugin from 'eslint-plugin-next'
 
-const compat = new FlatCompat({
-  baseConfig: js.configs.recommended,
-})
-
-const eslintConfig = [
-  ...compat.extends('next'),
+export default [
   {
-    plugins: {
-      '@next/next': nextPlugin,
+    ignores: ['.next/**', 'node_modules/**', '.vercel/**'],
+  },
+  {
+    files: ['**/*.{js,jsx,ts,tsx}'],
+    languageOptions: {
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
     },
     rules: {
-      '@next/next/no-html-link-for-pages': 'off',
+      ...js.configs.recommended.rules,
     },
   },
 ]
-
-export default eslintConfig
