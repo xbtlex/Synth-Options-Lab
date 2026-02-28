@@ -31,7 +31,7 @@ export default function Nav() {
               textTransform: 'uppercase' as const,
             }}
           >
-{'>_'} SYNTH OPTIONS LAB}
+            {'>_'} SYNTH OPTIONS LAB
           </Link>
 
           {/* Nav Links */}
