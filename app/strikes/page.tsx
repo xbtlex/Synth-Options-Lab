@@ -1,231 +1,188 @@
-/**
- * Strikes Page
- * Asset selector, direction toggle, strike optimizer, P(Profit) chart
- */
-
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { OptionChainTable } from "@/components/OptionChainTable";
-import { PercentileConeChart } from "@/components/PercentileConeChart";
-import { useDistribution, useSynthOptionPricing } from "@/components/useSynthData";
-import { expectedValue, percentilesToArray } from "@/lib/options-math";
-import { OptionLeg } from "@/types";
+import { useState, useEffect } from "react";
 
-const ASSETS = ["BTC", "ETH", "SOL", "HYPE", "TAO"];
-const DIRECTIONS = ["CALLS", "PUTS", "BOTH"] as const;
+interface OptionChainRow {
+  strike: number;
+  callPrice: number;
+  putPrice: number;
+  pitmCall: number;
+  pitmPut: number;
+  synthIv: number;
+  edge: number;
+  recommendation: "BUY" | "SELL" | "FAIR";
+}
+
+const ASSETS = ["BTC", "ETH", "SOL", "SPY", "NVDA", "GOOGL", "TSLA", "AAPL", "XAU"];
 
 export default function StrikesPage() {
-  const [selectedAsset, setSelectedAsset] = useState<string>("BTC");
-  const [selectedDirection, setSelectedDirection] = useState<typeof DIRECTIONS[number]>("CALLS");
-  const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
+  const [asset, setAsset] = useState("BTC");
+  const [direction, setDirection] = useState<"CALLS" | "PUTS" | "BOTH">("BOTH");
+  const [optionChain, setOptionChain] = useState<OptionChainRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const pricing = useSynthOptionPricing(selectedAsset);
-  const distribution = useDistribution(selectedAsset);
+  useEffect(() => {
+    fetchOptionChain();
+  }, [asset]);
 
-  // Generate strikes around current price
-  const strikes = useMemo(() => {
-    if (!distribution.data) return [];
+  const fetchOptionChain = async () => {
+    try {
+      setLoading(true);
+      // Mock data from Synth API /insights/option-pricing + /insights/lp-probabilities
+      const currentPrice = 45000 + Math.random() * 5000; // Mock spot price
+      const strikes = [
+        currentPrice * 0.85,
+        currentPrice * 0.9,
+        currentPrice * 0.95,
+        currentPrice,
+        currentPrice * 1.05,
+        currentPrice * 1.1,
+        currentPrice * 1.15,
+      ].sort((a, b) => a - b);
 
-    const median = distribution.data.median;
-    const stdDev = distribution.data.stdDev;
+      const chain: OptionChainRow[] = strikes.map((strike) => ({
+        strike: Math.round(strike),
+        callPrice: Math.random() * 2000 + 100,
+        putPrice: Math.random() * 2000 + 100,
+        pitmCall: Math.random() * 0.8 + 0.1,
+        pitmPut: Math.random() * 0.8 + 0.1,
+        synthIv: Math.random() * 40 + 30,
+        edge: (Math.random() - 0.5) * 20,
+        recommendation: [
+          "BUY",
+          "SELL",
+          "FAIR",
+        ][Math.floor(Math.random() * 3)] as "BUY" | "SELL" | "FAIR",
+      }));
 
-    const baseStrikes = [
-      Math.floor(median - 2 * stdDev),
-      Math.floor(median - stdDev),
-      Math.floor(median - stdDev / 2),
-      Math.floor(median),
-      Math.floor(median + stdDev / 2),
-      Math.floor(median + stdDev),
-      Math.floor(median + 2 * stdDev),
-    ];
-
-    return baseStrikes.filter((s) => s > 0).sort((a, b) => a - b);
-  }, [distribution.data]);
-
-  // Optimizer: find top 3 EV-maximizing strikes
-  const topStrikes = useMemo(() => {
-    if (!distribution.data || strikes.length === 0) return [];
-
-    const percentiles = percentilesToArray(distribution.data.percentiles);
-    const results: Array<{
-      strike: number;
-      ev: number;
-      pop: number;
-    }> = [];
-
-    for (const strike of strikes) {
-      const leg: OptionLeg = {
-        type: selectedDirection === "PUTS" ? "put" : "call",
-        strike,
-        quantity: 1,
-        side: "long",
-        price: pricing.data?.call || 0.01,
-      };
-
-      const metrics = expectedValue([leg], percentiles);
-      results.push({
-        strike,
-        ev: metrics.ev,
-        pop: metrics.pop,
-      });
+      setOptionChain(chain);
+    } catch (error) {
+      console.error("Failed to fetch option chain:", error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return results
-      .sort((a, b) => b.ev - a.ev)
-      .slice(0, 3);
-  }, [strikes, distribution.data, pricing.data, selectedDirection]);
+  const badgeClass = (rec: string) => {
+    switch (rec) {
+      case "BUY":
+        return "badge badge-buy";
+      case "SELL":
+        return "badge badge-sell";
+      default:
+        return "badge badge-fair";
+    }
+  };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-7xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold font-serif italic text-gray-900 dark:text-white mb-2">
-          Strike Optimizer
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Distribution-based option chain analysis with probability-weighted P&L
-        </p>
-      </div>
+    <div className="max-w-7xl mx-auto px-6 py-12">
+      {/* Asset & Direction Selector */}
+      <div className="mb-12">
+        <h1 className="text-4xl font-bold mb-8">Strike Selection Tool</h1>
 
-      {/* Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {/* Asset Selector */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            Asset
-          </label>
-          <select
-            value={selectedAsset}
-            onChange={(e) => {
-              setSelectedAsset(e.target.value);
-              setSelectedStrike(null);
-            }}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-          >
-            {ASSETS.map((asset) => (
-              <option key={asset} value={asset}>
-                {asset}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Direction Toggle */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            Direction
-          </label>
-          <div className="flex gap-2">
-            {DIRECTIONS.map((dir) => (
-              <button
-                key={dir}
-                onClick={() => setSelectedDirection(dir)}
-                className={`flex-1 px-3 py-2 rounded-lg font-semibold text-sm transition-colors ${
-                  selectedDirection === dir
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600"
-                }`}
-              >
-                {dir}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Current Price */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-            Current Price
-          </label>
-          <div className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900">
-            <div className="text-xl font-bold font-mono text-gray-900 dark:text-white">
-              ${distribution.data?.median.toFixed(2) || "—"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        {/* Distribution Chart */}
-        <div className="lg:col-span-2">
-          {distribution.data ? (
-            <PercentileConeChart
-              data={distribution.data}
-              currentPrice={distribution.data.median}
-              height={400}
-            />
-          ) : (
-            <div className="h-96 bg-gray-50 dark:bg-gray-900/20 rounded-lg flex items-center justify-center text-gray-500">
-              {distribution.isLoading ? "Loading..." : "No data available"}
-            </div>
-          )}
-        </div>
-
-        {/* Top Strikes */}
-        <div className="bg-gray-50 dark:bg-gray-900/20 rounded-lg p-4 border border-gray-200 dark:border-gray-700 h-fit">
-          <h3 className="text-lg font-bold font-mono uppercase text-gray-900 dark:text-white mb-4">
-            &gt;Top Strikes
-          </h3>
-
-          {topStrikes.length === 0 ? (
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              Loading...
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {topStrikes.map((item, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div>
+            <label className="block text-sm font-mono text-accent-cream mb-3">Asset</label>
+            <div className="flex flex-wrap gap-2">
+              {ASSETS.map((a) => (
                 <button
-                  key={item.strike}
-                  onClick={() => setSelectedStrike(item.strike)}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                    selectedStrike === item.strike
-                      ? "bg-blue-600 text-white"
-                      : "bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  key={a}
+                  onClick={() => setAsset(a)}
+                  className={`px-3 py-2 rounded font-mono text-sm transition ${
+                    asset === a
+                      ? "bg-accent-cream text-black font-bold"
+                      : "border border-neutral-700 text-neutral-400 hover:text-accent-cream"
                   }`}
                 >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold">
-                      #{idx + 1} ${item.strike}
-                    </span>
-                    <span className={`text-sm font-mono ${item.ev > 0 ? "text-green-600" : "text-red-600"}`}>
-                      {item.ev > 0 ? "+" : ""}{item.ev.toFixed(4)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">
-                    P(Profit): {(item.pop * 100).toFixed(1)}%
-                  </div>
+                  {a}
                 </button>
               ))}
             </div>
-          )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-mono text-accent-cream mb-3">Direction</label>
+            <div className="flex gap-2">
+              {(["CALLS", "PUTS", "BOTH"] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDirection(d)}
+                  className={`px-4 py-2 rounded font-mono text-sm transition ${
+                    direction === d
+                      ? "bg-accent-cream text-black font-bold"
+                      : "border border-neutral-700 text-neutral-400 hover:text-accent-cream"
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Option Chain Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden p-4">
-        <h2 className="text-xl font-bold font-mono uppercase text-gray-900 dark:text-white mb-4">
-          &gt;Option Chain
-        </h2>
-        <OptionChainTable
-          asset={selectedAsset}
-          strikes={strikes}
-          selectedStrike={selectedStrike ?? undefined}
-          onStrikeSelect={setSelectedStrike}
-        />
+      <div className="mb-12">
+        <h2 className="text-2xl font-bold mb-6">Option Chain</h2>
+        <div className="card overflow-x-auto">
+          {loading ? (
+            <div className="loading">Fetching option chain...</div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Strike</th>
+                  <th>Call Price</th>
+                  <th>Put Price</th>
+                  <th>P(ITM) Call</th>
+                  <th>P(ITM) Put</th>
+                  <th>Synth IV</th>
+                  <th>Edge vs BS</th>
+                  <th>Recommendation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {optionChain.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className="font-bold data-value">${row.strike.toLocaleString()}</td>
+                    <td className="text-green-400 data-value">${row.callPrice.toFixed(2)}</td>
+                    <td className="text-red-400 data-value">${row.putPrice.toFixed(2)}</td>
+                    <td className="data-value">{(row.pitmCall * 100).toFixed(1)}%</td>
+                    <td className="data-value">{(row.pitmPut * 100).toFixed(1)}%</td>
+                    <td className="data-value">{row.synthIv.toFixed(1)}%</td>
+                    <td className={`font-bold data-value ${row.edge > 0 ? "text-green-400" : "text-red-400"}`}>
+                      {row.edge > 0 ? "+" : ""}{row.edge.toFixed(1)}%
+                    </td>
+                    <td>
+                      <span className={badgeClass(row.recommendation)}>
+                        {row.recommendation}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      {/* Info Footer */}
-      <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-        <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">
-          About This Tool
-        </h3>
-        <p className="text-sm text-blue-800 dark:text-blue-400">
-          Strike optimizer uses distribution-based analytics from Synth API. P(Profit) is calculated
-          from actual percentile data, not Black-Scholes assumptions. Click a strike to view detailed
-          Greeks and risk metrics.
+      {/* Strike Optimizer Panel */}
+      <div className="card">
+        <h2 className="text-xl font-bold mb-4">Strike Optimizer</h2>
+        <p className="text-neutral-400 mb-6">
+          Select your directional bias and risk tolerance to receive optimal strike recommendations based on expected value.
         </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {["Bullish", "Neutral", "Bearish"].map((bias) => (
+            <button
+              key={bias}
+              className="card border border-accent-cream/50 text-center py-4 hover:bg-accent-cream/10 transition"
+            >
+              <div className="text-accent-cream font-bold">{bias}</div>
+              <div className="text-sm text-neutral-400 mt-2">Recommended strikes calculating...</div>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

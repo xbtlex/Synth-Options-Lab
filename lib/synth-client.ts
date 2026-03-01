@@ -1,355 +1,174 @@
 /**
- * Synth API Client
- * Typed HTTP client with error handling & retry logic
- * All requests go through server-side proxy (/api/synth/*)
+ * Synth Options Lab — API Client
+ * Interfaces with Synth's 7 API endpoints
  */
 
-import {
-  OptionPrice,
-  Distribution,
-  VolatilityData,
-  SynthOptionPricingResponse,
-  SynthDistributionResponse,
-  SynthVolatilityResponse,
-  Percentile,
-  PolymarketEdge,
-  RequestConfig,
-} from "@/types";
-
-// ============================================
-// CONFIG & HELPERS
-// ============================================
-
-const API_BASE = "/api/synth";
-const DEFAULT_TIMEOUT = 10000;
-const DEFAULT_RETRIES = 2;
-const RETRY_DELAY = 1000; // ms
-
-interface FetchOptions {
-  method?: "GET" | "POST";
-  headers?: Record<string, string>;
-  body?: string;
-  timeout?: number;
+export interface OptionPricingResponse {
+  asset: string;
+  strikePrice: number;
+  callPrice: number;
+  putPrice: number;
+  expiryTime: string;
 }
 
-// ============================================
-// HTTP CLIENT WITH RETRY
-// ============================================
+export interface PercentileResponse {
+  asset: string;
+  timeHorizon: string;
+  percentiles: {
+    p0_5: number;
+    p5: number;
+    p20: number;
+    p35: number;
+    p50: number;
+    p65: number;
+    p80: number;
+    p95: number;
+    p99_5: number;
+  };
+}
 
-async function fetchWithRetry(
-  endpoint: string,
-  options: FetchOptions = {},
-  retries: number = DEFAULT_RETRIES
-): Promise<Response> {
-  const timeout = options.timeout || DEFAULT_TIMEOUT;
+export interface VolatilityResponse {
+  asset: string;
+  synthForwardVol: number;
+  realizedVol: number;
+  volRatio: number;
+  timestamp: string;
+}
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
+export interface LPProbabilitiesResponse {
+  asset: string;
+  strikes: Array<{
+    strike: number;
+    pitmCall: number;
+    pitmPut: number;
+  }>;
+}
 
-      const response = await fetch(endpoint, {
-        ...options,
-        signal: controller.signal,
+export interface LPBoundsResponse {
+  asset: string;
+  ranges: Array<{
+    lower: number;
+    upper: number;
+    probability: number;
+  }>;
+}
+
+export interface LiquidationProbabilityResponse {
+  asset: string;
+  priceLevel: number;
+  probability6h: number;
+  probability12h: number;
+  probability18h: number;
+  probability24h: number;
+}
+
+export interface PolymarketComparisonResponse {
+  asset: string;
+  synthProbability: number;
+  polymarketPrice: number;
+  discrepancy: number;
+  signal: "BUY" | "SELL" | "NEUTRAL";
+}
+
+class SynthClient {
+  private baseUrl: string;
+  private apiKey: string;
+
+  constructor(apiKey?: string) {
+    this.baseUrl = process.env.NEXT_PUBLIC_SYNTH_API_URL || "https://api.synth.io";
+    this.apiKey = apiKey || process.env.NEXT_PUBLIC_SYNTH_API_KEY || "";
+  }
+
+  private async request<T>(endpoint: string, params?: Record<string, any>): Promise<T> {
+    const url = new URL(`${this.baseUrl}${endpoint}`);
+
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.append(key, String(value));
       });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        return response;
-      }
-
-      // Retry on 5xx or 429
-      if ((response.status >= 500 || response.status === 429) && attempt < retries) {
-        const delay = RETRY_DELAY * Math.pow(2, attempt);
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-      }
-
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    } catch (error) {
-      if (attempt === retries) {
-        throw error;
-      }
-
-      const delay = RETRY_DELAY * Math.pow(2, attempt);
-      await new Promise((r) => setTimeout(r, delay));
     }
-  }
 
-  throw new Error("Request failed after max retries");
-}
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-// ============================================
-// OPTION PRICING
-// ============================================
-
-export async function getOptionPricing(
-  asset: string,
-  config?: Partial<RequestConfig>
-): Promise<OptionPrice> {
-  const params = new URLSearchParams({
-    asset,
-    ...Object.fromEntries(
-      Object.entries(config || {}).filter(([, v]) => v !== undefined)
-    ),
-  });
-
-  const response = await fetchWithRetry(`${API_BASE}/option-pricing?${params}`);
-  const data: SynthOptionPricingResponse = await response.json();
-
-  return {
-    call: data.call_price,
-    put: data.put_price,
-    bid: data.bid,
-    ask: data.ask,
-    mark: data.mark,
-    timestamp: data.timestamp,
-  };
-}
-
-// ============================================
-// DISTRIBUTION (PERCENTILES)
-// ============================================
-
-export async function getDistribution(
-  asset: string,
-  config?: Partial<RequestConfig>
-): Promise<Distribution> {
-  const params = new URLSearchParams({
-    asset,
-    ...Object.fromEntries(
-      Object.entries(config || {}).filter(([, v]) => v !== undefined)
-    ),
-  });
-
-  const response = await fetchWithRetry(`${API_BASE}/percentiles?${params}`);
-  const data: SynthDistributionResponse = await response.json();
-
-  // Convert percentile array to object
-  const percentiles: Record<string, number> = {};
-  for (const p of data.percentiles) {
-    percentiles[p.percentile] = p.value;
-  }
-
-  return {
-    percentiles,
-    mean: data.mean,
-    median: data.median,
-    stdDev: data.std_dev,
-    min: data.min,
-    max: data.max,
-    timestamp: data.timestamp,
-  };
-}
-
-// ============================================
-// VOLATILITY
-// ============================================
-
-export async function getVolatility(
-  asset: string,
-  config?: Partial<RequestConfig>
-): Promise<VolatilityData> {
-  const params = new URLSearchParams({
-    asset,
-    ...Object.fromEntries(
-      Object.entries(config || {}).filter(([, v]) => v !== undefined)
-    ),
-  });
-
-  const response = await fetchWithRetry(`${API_BASE}/volatility?${params}`);
-  const data: SynthVolatilityResponse = await response.json();
-
-  return {
-    implied: data.implied_volatility,
-    realized: data.realized_volatility,
-    ratio: data.ratio,
-    skew: data.skew,
-    term: data.term,
-    timestamp: data.timestamp,
-  };
-}
-
-// ============================================
-// LP PROBABILITIES
-// ============================================
-
-export async function getLpProbabilities(
-  asset: string,
-  config?: Partial<RequestConfig>
-): Promise<Record<string, number>> {
-  const params = new URLSearchParams({
-    asset,
-    ...Object.fromEntries(
-      Object.entries(config || {}).filter(([, v]) => v !== undefined)
-    ),
-  });
-
-  const response = await fetchWithRetry(`${API_BASE}/lp-probabilities?${params}`);
-  const data = await response.json();
-
-  return data.probabilities || {};
-}
-
-// ============================================
-// LIQUIDATION DATA
-// ============================================
-
-export async function getLiquidationData(
-  asset: string,
-  config?: Partial<RequestConfig>
-): Promise<{
-  level: number;
-  confidence: number;
-  timestamp: number;
-}> {
-  const params = new URLSearchParams({
-    asset,
-    ...Object.fromEntries(
-      Object.entries(config || {}).filter(([, v]) => v !== undefined)
-    ),
-  });
-
-  const response = await fetchWithRetry(`${API_BASE}/liquidation?${params}`);
-  const data = await response.json();
-
-  return {
-    level: data.liquidation_level || 0,
-    confidence: data.confidence || 0,
-    timestamp: data.timestamp,
-  };
-}
-
-// ============================================
-// POLYMARKET EDGES
-// ============================================
-
-export async function getPolymarketEdge(
-  asset: string,
-  timeframe: "daily" | "hourly" = "daily"
-): Promise<PolymarketEdge> {
-  const endpoint = timeframe === "hourly" ? "up-down/hourly" : "up-down/daily";
-
-  const params = new URLSearchParams({
-    asset,
-  });
-
-  const response = await fetchWithRetry(`${API_BASE}/polymarket/${endpoint}?${params}`);
-  const data = await response.json();
-
-  const synthPrice = data.synth_price || 0;
-  const polyPrice = data.polymarket_price || 0;
-  const edge = synthPrice - polyPrice;
-
-  return {
-    asset,
-    polymarketPrice: polyPrice,
-    synthPrice: synthPrice,
-    edge: edge,
-    edgePercent: polyPrice > 0 ? (edge / polyPrice) * 100 : 0,
-    direction:
-      edge > 0.02 ? "bullish" : edge < -0.02 ? "bearish" : "neutral",
-    timestamp: data.timestamp,
-  };
-}
-
-// ============================================
-// RANGE PREDICTION (POLYMARKET)
-// ============================================
-
-export async function getPolymarketRange(
-  asset: string
-): Promise<{
-  lowProbability: number;
-  midProbability: number;
-  highProbability: number;
-  timestamp: number;
-}> {
-  const params = new URLSearchParams({ asset });
-
-  const response = await fetchWithRetry(`${API_BASE}/polymarket/range?${params}`);
-  const data = await response.json();
-
-  return {
-    lowProbability: data.low_prob || 0,
-    midProbability: data.mid_prob || 0,
-    highProbability: data.high_prob || 0,
-    timestamp: data.timestamp,
-  };
-}
-
-// ============================================
-// BATCH HELPER (for multiple assets)
-// ============================================
-
-export async function getMultipleAssetData(
-  assets: string[]
-): Promise<
-  Record<
-    string,
-    {
-      pricing: OptionPrice;
-      distribution: Distribution;
-      volatility: VolatilityData;
+    if (!response.ok) {
+      throw new Error(`Synth API error: ${response.statusText}`);
     }
-  >
-> {
-  const results: Record<
-    string,
-    {
-      pricing: OptionPrice;
-      distribution: Distribution;
-      volatility: VolatilityData;
-    }
-  > = {};
 
-  for (const asset of assets) {
-    try {
-      const [pricing, distribution, volatility] = await Promise.all([
-        getOptionPricing(asset),
-        getDistribution(asset),
-        getVolatility(asset),
-      ]);
-
-      results[asset] = {
-        pricing,
-        distribution,
-        volatility,
-      };
-    } catch (error) {
-      console.error(`Failed to fetch data for ${asset}:`, error);
-      // Continue with other assets
-    }
+    return response.json();
   }
 
-  return results;
-}
+  /**
+   * Endpoint 1: Option Pricing
+   */
+  async getOptionPricing(asset: string, strikePrice?: number): Promise<OptionPricingResponse> {
+    return this.request<OptionPricingResponse>("/insights/option-pricing", {
+      asset,
+      ...(strikePrice && { strike: strikePrice }),
+    });
+  }
 
-// ============================================
-// ERROR HANDLING WRAPPER
-// ============================================
+  /**
+   * Endpoint 2: Prediction Percentiles (9-point distribution)
+   */
+  async getPredictionPercentiles(asset: string): Promise<PercentileResponse> {
+    return this.request<PercentileResponse>("/prediction-percentiles", {
+      asset,
+    });
+  }
 
-export class SynthClientError extends Error {
-  constructor(
-    public endpoint: string,
-    public statusCode?: number,
-    message?: string
-  ) {
-    super(message || `Synth API error on ${endpoint}`);
-    this.name = "SynthClientError";
+  /**
+   * Endpoint 3: Volatility (forecast + realized)
+   */
+  async getVolatility(asset: string): Promise<VolatilityResponse> {
+    return this.request<VolatilityResponse>("/insights/volatility", {
+      asset,
+    });
+  }
+
+  /**
+   * Endpoint 4: LP Probabilities (P(ITM) by strike)
+   */
+  async getLPProbabilities(asset: string): Promise<LPProbabilitiesResponse> {
+    return this.request<LPProbabilitiesResponse>("/insights/lp-probabilities", {
+      asset,
+    });
+  }
+
+  /**
+   * Endpoint 5: LP Bounds (range probabilities)
+   */
+  async getLPBounds(asset: string): Promise<LPBoundsResponse> {
+    return this.request<LPBoundsResponse>("/insights/lp-bounds", {
+      asset,
+    });
+  }
+
+  /**
+   * Endpoint 6: Liquidation Probabilities
+   */
+  async getLiquidationProbabilities(asset: string, priceLevel: number): Promise<LiquidationProbabilityResponse> {
+    return this.request<LiquidationProbabilityResponse>("/insights/liquidation", {
+      asset,
+      priceLevel,
+    });
+  }
+
+  /**
+   * Endpoint 7: Polymarket Comparison
+   */
+  async getPolymarketComparison(asset: string): Promise<PolymarketComparisonResponse> {
+    return this.request<PolymarketComparisonResponse>("/insights/polymarket/up-down/daily", {
+      asset,
+    });
   }
 }
 
-export async function withErrorHandling<T>(
-  fn: () => Promise<T>,
-  defaultValue: T,
-  errorLabel: string
-): Promise<T> {
-  try {
-    return await fn();
-  } catch (error) {
-    console.error(`${errorLabel}:`, error);
-    return defaultValue;
-  }
-}
+// Export singleton instance
+export const synthClient = new SynthClient();
+
+export default SynthClient;

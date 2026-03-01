@@ -1,146 +1,187 @@
-/**
- * Home Page
- * Landing with feature overview
- */
+"use client";
 
-import Link from "next/link";
-import { VolatilityScannerGrid } from "@/components/VolScannerCard";
+import { useEffect, useState } from "react";
 
-export default function Home() {
-  const features = [
-    {
-      title: "Distribution-Based Pricing",
-      description: "Real Synth percentile data instead of Black-Scholes assumptions",
-      icon: "📊",
-    },
-    {
-      title: "Probability-Weighted P&L",
-      description: "Overlay live distribution on payoff diagrams for true risk visualization",
-      icon: "📈",
-    },
-    {
-      title: "Synth vs Black-Scholes",
-      description: "Always compare distribution-based pricing against traditional models",
-      icon: "⚖️",
-    },
-    {
-      title: "Real-Time Synth Data",
-      description: "Live option pricing, volatility, and percentiles from Synth API",
-      icon: "⚡",
-    },
-    {
-      title: "Cross-Asset Analysis",
-      description: "Compare vol ratios, term structure, and skew across 5+ assets",
-      icon: "🔄",
-    },
-    {
-      title: "Greeks Tracking",
-      description: "Delta, gamma, vega, theta calculated from distribution",
-      icon: "🧮",
-    },
-  ];
+interface AssetVol {
+  asset: string;
+  synthVol: number;
+  realizedVol: number;
+  ratio: number;
+  regime: "HIGH" | "NORMAL" | "LOW";
+}
+
+const ASSETS = ["BTC", "ETH", "SOL", "SPY", "NVDA", "GOOGL", "TSLA", "AAPL", "XAU"];
+
+export default function VolScanner() {
+  const [assets, setAssets] = useState<AssetVol[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchVolData();
+  }, []);
+
+  const fetchVolData = async () => {
+    try {
+      setLoading(true);
+      // Simulate API calls to Synth /insights/volatility
+      // In production, this would call the actual Synth API
+      const mockData: AssetVol[] = ASSETS.map((asset) => ({
+        asset,
+        synthVol: Math.random() * 80 + 20,
+        realizedVol: Math.random() * 60 + 15,
+        ratio: 0,
+        regime: ["HIGH", "NORMAL", "LOW"][Math.floor(Math.random() * 3)] as "HIGH" | "NORMAL" | "LOW",
+      })).map((d) => ({
+        ...d,
+        ratio: d.synthVol / d.realizedVol,
+      }));
+
+      setAssets(mockData);
+    } catch (error) {
+      console.error("Failed to fetch volatility data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mispricings = assets
+    .filter((a) => Math.abs(a.ratio - 1) > 0.15)
+    .sort((a, b) => Math.abs(b.ratio - 1) - Math.abs(a.ratio - 1));
+
+  const regimeColor = (regime: string) => {
+    switch (regime) {
+      case "HIGH":
+        return "text-red-400";
+      case "NORMAL":
+        return "text-neutral-400";
+      case "LOW":
+        return "text-green-400";
+      default:
+        return "";
+    }
+  };
 
   return (
-    <div className="container mx-auto py-12 px-4 max-w-7xl">
-      {/* Hero */}
-      <div className="mb-16 text-center">
-        <h1 className="text-5xl font-bold font-serif italic text-gray-900 dark:text-white mb-4">
-          Synth Options Lab
-        </h1>
-        <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
-          Distribution-based option analytics with real Synth API data. Stop guessing.
-          Start measuring.
-        </p>
-
-        <div className="flex gap-4 justify-center">
-          <Link
-            href="/strikes"
-            className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
-          >
-            Open Strikes →
-          </Link>
-          <Link
-            href="/strategy"
-            className="px-6 py-3 rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white font-semibold hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
-          >
-            Build Strategy →
-          </Link>
-        </div>
-      </div>
-
-      {/* Feature Grid */}
+    <div className="max-w-7xl mx-auto px-6 py-12">
+      {/* Hero Stats */}
       <div className="mb-16">
-        <h2 className="text-2xl font-bold font-serif italic text-gray-900 dark:text-white mb-8">
-          Core Features
-        </h2>
+        <h1 className="text-4xl md:text-5xl font-bold mb-8">
+          Volatility Intelligence
+        </h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="card">
+            <div className="text-accent-cream text-sm font-mono mb-2">ASSETS SCANNED</div>
+            <div className="text-3xl font-bold data-value">{ASSETS.length}</div>
+          </div>
+          
+          <div className="card">
+            <div className="text-accent-cream text-sm font-mono mb-2">MISPRICINGS FOUND</div>
+            <div className="text-3xl font-bold text-red-400 data-value">{mispricings.length}</div>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, idx) => (
-            <div
-              key={idx}
-              className="p-6 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:shadow-lg transition-shadow"
-            >
-              <div className="text-3xl mb-3">{feature.icon}</div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">{feature.description}</p>
+          <div className="card">
+            <div className="text-accent-cream text-sm font-mono mb-2">AVG VOL EDGE</div>
+            <div className="text-3xl font-bold text-green-400 data-value">
+              {mispricings.length > 0
+                ? `${(mispricings.reduce((a, m) => a + Math.abs((m.ratio - 1) * 100), 0) / mispricings.length).toFixed(1)}%`
+                : "—"}
             </div>
-          ))}
+          </div>
+
+          <div className="card">
+            <div className="text-accent-cream text-sm font-mono mb-2">BEST OPPORTUNITY</div>
+            <div className="text-sm data-value">
+              {mispricings.length > 0
+                ? `${mispricings[0].asset} ${mispricings[0].ratio > 1 ? "underpriced" : "overpriced"}`
+                : "Scanning..."}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="mb-16 grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 font-mono">
-            5+
-          </div>
-          <div className="text-sm text-blue-900 dark:text-blue-300">Assets Live</div>
-        </div>
+      {/* Asset Grid */}
+      <div className="mb-16">
+        <h2 className="text-2xl font-bold mb-6">Asset Volatility Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {loading ? (
+            <div className="col-span-full loading">Loading volatility data...</div>
+          ) : (
+            assets.map((a) => (
+              <div key={a.asset} className="card group cursor-pointer hover:border-accent-cream/50 transition">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-xl font-bold text-white">{a.asset}</h3>
+                  <span className={`badge ${regimeColor(a.regime)}`}>
+                    {a.regime}
+                  </span>
+                </div>
 
-        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/30 rounded-lg p-4 border border-green-200 dark:border-green-800">
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400 font-mono">
-            60s
-          </div>
-          <div className="text-sm text-green-900 dark:text-green-300">Price Refresh</div>
-        </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-xs text-neutral-500 uppercase font-mono mb-1">Synth Vol</div>
+                    <div className="text-2xl font-bold data-value">{a.synthVol.toFixed(1)}%</div>
+                  </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/30 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
-          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 font-mono">
-            ∞
-          </div>
-          <div className="text-sm text-purple-900 dark:text-purple-300">Strikes</div>
-        </div>
+                  <div>
+                    <div className="text-xs text-neutral-500 uppercase font-mono mb-1">Realized Vol</div>
+                    <div className="text-xl data-value text-neutral-400">{a.realizedVol.toFixed(1)}%</div>
+                  </div>
 
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/30 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
-          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400 font-mono">
-            Live
-          </div>
-          <div className="text-sm text-orange-900 dark:text-orange-300">Synth API</div>
-        </div>
-      </div>
-
-      {/* Call to Action */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-8 text-white text-center">
-        <h2 className="text-2xl font-bold mb-3">Ready to analyze?</h2>
-        <p className="mb-6">Start with volatility scanner or jump straight into option chains.</p>
-
-        <div className="flex gap-4 justify-center flex-wrap">
-          <Link
-            href="/volatility"
-            className="px-6 py-3 rounded-lg bg-white text-blue-600 font-semibold hover:bg-gray-100 transition-colors"
-          >
-            Vol Scanner →
-          </Link>
-          <Link
-            href="/strikes"
-            className="px-6 py-3 rounded-lg bg-white/20 text-white font-semibold hover:bg-white/30 transition-colors border border-white/40"
-          >
-            Strikes Explorer →
-          </Link>
+                  <div className="pt-3 border-t border-neutral-700">
+                    <div className="text-xs text-neutral-500 uppercase font-mono mb-1">Vol Ratio</div>
+                    <div className={`text-lg font-bold data-value ${a.ratio > 1.15 ? "text-green-400" : a.ratio < 0.85 ? "text-red-400" : "text-neutral-400"}`}>
+                      {a.ratio.toFixed(2)}x
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
+
+      {/* Top Mispricings Table */}
+      {mispricings.length > 0 && (
+        <div className="mb-16">
+          <h2 className="text-2xl font-bold mb-6">Top Mispricings</h2>
+          <div className="card overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Synth Vol</th>
+                  <th>Realized Vol</th>
+                  <th>Ratio</th>
+                  <th>Direction</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mispricings.slice(0, 10).map((m) => (
+                  <tr key={m.asset}>
+                    <td className="font-bold">{m.asset}</td>
+                    <td className="data-value">{m.synthVol.toFixed(1)}%</td>
+                    <td className="data-value">{m.realizedVol.toFixed(1)}%</td>
+                    <td className="data-value font-bold">
+                      {m.ratio > 1 ? (
+                        <span className="text-green-400">{m.ratio.toFixed(2)}x ↑</span>
+                      ) : (
+                        <span className="text-red-400">{m.ratio.toFixed(2)}x ↓</span>
+                      )}
+                    </td>
+                    <td>
+                      {m.ratio > 1 ? (
+                        <span className="badge badge-buy">Underpriced</span>
+                      ) : (
+                        <span className="badge badge-sell">Overpriced</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
