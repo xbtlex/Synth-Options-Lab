@@ -3,6 +3,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["syd1"],
-  "skipLinting": true
+  "regions": ["syd1"]
 }
